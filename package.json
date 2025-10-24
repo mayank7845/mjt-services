@@ -2,10 +2,11 @@
   "name": "buynow",
   "version": "1.0.0",
   "main": "index.js",
-  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "concurrently \"tsc -w\" \"node --watch ./src/index.js\""
+    "start": "concurrently \"tsc -w\" \"node --watch ./src/index.js\"",
+    "build": "npx tsc && npx webpack --config webpack.config.js --mode production && find ./src -type f -name \"*.js\" -delete",
+    "serve": "node dist/bundle.js"
   },
   "keywords": [],
   "author": "",
@@ -13,7 +14,6 @@
   "description": "",
   "dependencies": {
     "axios": "^1.12.2",
-    "concurrently": "^9.2.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
@@ -24,6 +24,12 @@
     "@types/express": "^5.0.4",
     "@types/node": "^24.9.1",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.9.3"
+    "concurrently": "^8.2.2",
+    "typescript": "^5.4.5",
+    "@types/webpack-node-externals": "^3.0.4",
+    "ts-loader": "^9.5.2",
+    "webpack": "^5.99.7",
+    "webpack-cli": "^6.0.1",
+    "webpack-node-externals": "^3.0.0"
   }
 }

@@ -1,10 +1,12 @@
-// src/routes/orderRoutes.ts
-import { Router } from "express";
-import { buyNow } from "../controllers/index.js";
+import express, { Router } from "express";
+import { home, buyNow } from "../controllers/index";
 
-const orderRouter = Router();
+const orderRouter: Router = Router();
 
-orderRouter.post("/buyNow",buyNow );
+orderRouter.use(express.json());
 
+orderRouter.get("/", home);
+orderRouter.post("/", home);
+orderRouter.post("/buyNow", buyNow);
 
 export default orderRouter;
