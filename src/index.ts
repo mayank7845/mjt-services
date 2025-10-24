@@ -2,6 +2,7 @@ import express, { Application, NextFunction, Request, Response } from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import orderRouter from "./buyNow/routes/index";
+import helmet from "helmet";
 
 const app: Application = express();
 
@@ -41,6 +42,14 @@ app.use(
       next(err);
     }
   }
+);
+
+app.use(
+  helmet.hsts({
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  })
 );
 
 app.get("/", async (req: Request, res: Response): Promise<any> => {
