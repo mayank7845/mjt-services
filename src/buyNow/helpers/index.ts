@@ -66,106 +66,195 @@ const SHOP_URL = process.env.SHOP_URL;
   return { customerId: data.customer.id, addresses: data.customer};
 };
 
-export async function createDraftOrder(input: {
-  customerId?: string;
-  lineItems: { variantId: string; quantity: number }[];
+export async function createOrder(input: {
+  customerId?: string; 
+  email?: string;
+  lineItems: { variantId?: string; quantity: number; price?: number }[];
   shippingAddress?: any;
   billingAddress?: any;
-  email?: string;
-  note?: string[];
+  note?: string | null;
   tags?: string[];
-  discountCodes?: string[];
-  acceptAutomaticDiscounts?: boolean;
-  shippingCharge?: { title: string; price: number };
-}): Promise<any> {
+  discountCodes?: string[] | null; 
+  shippingCharge?: { title: string; price: number } | null;
+  currency?: string;
+  markAsPaid?: boolean; 
+}) {
   const mutation = `
-    mutation draftOrderCreate($input: DraftOrderInput!) {
-      draftOrderCreate(input: $input) {
-        draftOrder { id }
+    mutation orderCreate($order: OrderCreateOrderInput!, $options: OrderCreateOptionsInput) {
+      orderCreate(order: $order, options: $options) {
         userErrors { field message }
+        order { id displayFinancialStatus lineItems(first:50){ nodes { id title quantity variant { id } } } }
       }
     }
   `;
 
-  const payload: any = {
-    lineItems: input.lineItems.map(li => ({
-      variantId: li.variantId,
-      quantity:  li.quantity
-    })),
-    ...(input.shippingCharge && {
-      shippingLine: {
-        title: input.shippingCharge.title,
-        price: input.shippingCharge.price.toFixed(2),
+  const lineItems = input.lineItems.map(li => {
+    const item: any = {
+      quantity: li.quantity,
+    };
+    if (li.variantId) item.variantId = li.variantId;
+    else if (li.price !== undefined) {
+      item.title = "Custom item";
+      item.priceSet = {
+        shopMoney: { amount: li.price, currencyCode: input.currency || "USD" }
+      };
+    }
+    return item;
+  });
+
+  const transactions: any[] = [];
+  if (input.markAsPaid) {
+    transactions.push({
+      kind: "SALE",
+      status: "SUCCESS",
+      amountSet: {
+        shopMoney: {
+          amount: lineItems.reduce((sum, li) => {
+            return sum + (li.priceSet?.shopMoney?.amount ? Number(li.priceSet.shopMoney.shopMoney?.amount ?? 0) : 0);
+          }, 0),
+          currencyCode: input.currency || "USD"
+        }
       }
-    }),
-    ...(input.discountCodes?.length && { discountCodes: input.discountCodes }),
-    acceptAutomaticDiscounts: input.acceptAutomaticDiscounts,
-    customerId: input.customerId,
-    shippingAddress: input.shippingAddress,
-    billingAddress:  input.billingAddress,
-    email:            input.email,
-    note:             input.note,
-    tags:             input.tags,
-  };
-
-  const resp = await shopifyRequest(mutation, { input: payload });
-  if (resp.draftOrderCreate.userErrors.length) {
-    throw new Error(resp.draftOrderCreate.userErrors.map((e:any) => e.message).join("; "));
+    });
   }
-  return { draftOrderId: resp.draftOrderCreate.draftOrder.id };
-};
 
-export async function completeDraftOrder(
-  draftOrderId: any,
-  paymentPending: boolean
-): Promise<any> {
-  const mutation = `
-    mutation draftOrderComplete($id: ID!, $paymentPending: Boolean!) {
-      draftOrderComplete(id: $id, paymentPending: $paymentPending) {
-        userErrors { field message }
-        draftOrder {
-          order {
-            id
-            displayFinancialStatus
-            totalPriceSet { shopMoney { amount currencyCode } }
-            lineItems(first: 50) {
-              nodes {
-                id
-                title
-                quantity
-                variant { id }
-              }
-            }
+  const orderPayload: any = {
+    currency: input.currency || "USD",
+    lineItems,
+    customerId: input.customerId,
+    email: input.email,
+    shippingAddress: input.shippingAddress,
+    billingAddress: input.billingAddress,
+    note: input.note,
+    tags: input.tags ? input.tags.join(",") : undefined,
+    // discountCodes: input.discountCodes,
+    transactions: transactions.length ? transactions : undefined,
+    ...(input.shippingCharge && {
+      shippingLines: [
+        {
+          title: input.shippingCharge.title,
+          priceSet: {
+            shopMoney: { amount: input.shippingCharge.price, currencyCode: input.currency || "USD" }
           }
         }
-      }
-    }
-  `;
-  const variables = { id: draftOrderId, paymentPending };
-  const data = await shopifyRequest(mutation, variables);
-  const payload = data.draftOrderComplete;
-  if (payload.userErrors?.length) {
-    const msg = payload.userErrors
-      .map((e: any) => {
-        if (e.field && Array.isArray(e.field)) {
-          return `${e.field.join(",")}: ${e.message}`;
-        }
-        return e.message;
-      })
-      .join("; ");
-    throw new Error("draftOrderComplete errors: " + msg);
-  }
-  const order = payload.draftOrder?.order;
-  if (!order?.id) {
-    throw new Error("No order returned from draftOrderComplete");
-  }
-  return {
-    shopifyOrderId: order.id,
-    displayFinancialStatus: order.displayFinancialStatus,
-    totalPriceSet: order.totalPriceSet,
-    lineItems: order.lineItems.nodes,
+      ]
+    }),
+    
   };
-};
+
+  const options = {
+    sendReceipt: false,
+    sendFulfillmentReceipt: false
+  };
+
+  const data = await shopifyRequest(mutation, { order: orderPayload, options });
+  const payload = data.orderCreate;
+  if (payload.userErrors?.length) {
+    throw new Error(payload.userErrors.map((e:any) => e.message).join("; "));
+  }
+  return payload.order;
+}
+
+// export async function createDraftOrder(input: {
+//   customerId?: string;
+//   lineItems: { variantId: string; quantity: number }[];
+//   shippingAddress?: any;
+//   billingAddress?: any;
+//   email?: string;
+//   note?: string[];
+//   tags?: string[];
+//   discountCodes?: string[];
+//   acceptAutomaticDiscounts?: boolean;
+//   shippingCharge?: { title: string; price: number };
+// }): Promise<any> {
+//   const mutation = `
+//     mutation draftOrderCreate($input: DraftOrderInput!) {
+//       draftOrderCreate(input: $input) {
+//         draftOrder { id }
+//         userErrors { field message }
+//       }
+//     }
+//   `;
+
+//   const payload: any = {
+//     lineItems: input.lineItems.map(li => ({
+//       variantId: li.variantId,
+//       quantity:  li.quantity
+//     })),
+//     ...(input.shippingCharge && {
+//       shippingLine: {
+//         title: input.shippingCharge.title,
+//         price: input.shippingCharge.price.toFixed(2),
+//       }
+//     }),
+//     ...(input.discountCodes?.length && { discountCodes: input.discountCodes }),
+//     acceptAutomaticDiscounts: input.acceptAutomaticDiscounts,
+//     customerId: input.customerId,
+//     shippingAddress: input.shippingAddress,
+//     billingAddress:  input.billingAddress,
+//     email:            input.email,
+//     note:             input.note,
+//     tags:             input.tags,
+//   };
+
+//   const resp = await shopifyRequest(mutation, { input: payload });
+//   if (resp.draftOrderCreate.userErrors.length) {
+//     throw new Error(resp.draftOrderCreate.userErrors.map((e:any) => e.message).join("; "));
+//   }
+//   return { draftOrderId: resp.draftOrderCreate.draftOrder.id };
+// };
+
+// export async function completeDraftOrder(
+//   draftOrderId: any,
+//   paymentPending: boolean
+// ): Promise<any> {
+//   const mutation = `
+//     mutation draftOrderComplete($id: ID!, $paymentPending: Boolean!) {
+//       draftOrderComplete(id: $id, paymentPending: $paymentPending) {
+//         userErrors { field message }
+//         draftOrder {
+//           order {
+//             id
+//             displayFinancialStatus
+//             totalPriceSet { shopMoney { amount currencyCode } }
+//             lineItems(first: 50) {
+//               nodes {
+//                 id
+//                 title
+//                 quantity
+//                 variant { id }
+//               }
+//             }
+//           }
+//         }
+//       }
+//     }
+//   `;
+//   const variables = { id: draftOrderId, paymentPending };
+//   const data = await shopifyRequest(mutation, variables);
+//   const payload = data.draftOrderComplete;
+//   if (payload.userErrors?.length) {
+//     const msg = payload.userErrors
+//       .map((e: any) => {
+//         if (e.field && Array.isArray(e.field)) {
+//           return `${e.field.join(",")}: ${e.message}`;
+//         }
+//         return e.message;
+//       })
+//       .join("; ");
+//     throw new Error("draftOrderComplete errors: " + msg);
+//   }
+//   const order = payload.draftOrder?.order;
+//   if (!order?.id) {
+//     throw new Error("No order returned from draftOrderComplete");
+//   }
+//   return {
+//     shopifyOrderId: order.id,
+//     displayFinancialStatus: order.displayFinancialStatus,
+//     totalPriceSet: order.totalPriceSet,
+//     lineItems: order.lineItems.nodes,
+//   };
+// };
 
 //  export async function calculateBuyNowTotal(
 //   lineItems: any[],

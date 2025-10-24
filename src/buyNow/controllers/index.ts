@@ -1,5 +1,5 @@
 import  type { Request, Response } from "express";
-import {  completeDraftOrder, createDraftOrder,  getCustomerAddress } from "../helpers/index.js";
+import { createOrder, getCustomerAddress } from "../helpers/index.js";
 
 export const buyNow = async (req: Request, res: Response): Promise<any> => {
   try {
@@ -13,80 +13,69 @@ export const buyNow = async (req: Request, res: Response): Promise<any> => {
       tags = [],
       discountCodes = [],
       acceptAutomaticDiscounts = false,
-      paymentMethod,     
+      paymentMethod,  
       currency = "INR",
     } = req.body as any;
 
-    if (!customerId) {
-      return res.status(400).json({ success: false, error: "Missing customerId" });
-    }
-    if (!shippingAddressId || !billingAddressId) {
-      return res
-        .status(400)
-        .json({ success: false, error: "Provide shippingAddressId and billingAddressId" });
-    }
-    if (!Array.isArray(lineItems) || lineItems.length === 0) {
-      return res.status(400).json({ success: false, error: "Missing lineItems" });
-    }
-    if (!["COD","ONLINE"].includes(paymentMethod)) {
-      return res.status(400).json({ success: false, error: "Invalid paymentMethod" });
-    }
+    if (!customerId) return res.status(400).json({ success: false, error: "Missing customerId" });
+    if (!shippingAddressId || !billingAddressId) return res.status(400).json({ success: false, error: "Provide shippingAddressId and billingAddressId" });
+    if (!Array.isArray(lineItems) || lineItems.length === 0) return res.status(400).json({ success: false, error: "Missing lineItems" });
+    if (!["COD","ONLINE"].includes(paymentMethod)) return res.status(400).json({ success: false, error: "Invalid paymentMethod" });
 
     const { addresses } = await getCustomerAddress(customerId);
     const shippingAddress = addresses.addresses.find((a:any) => a.id === shippingAddressId);
     const billingAddress  = addresses.addresses.find((a:any) => a.id === billingAddressId);
-    if (!shippingAddress || !billingAddress) {
-      return res.status(404).json({ success: false, error: "Address not found" });
-    }
-      let shippingCharge = { title: "Prepaid", price: 150 };
+    if (!shippingAddress || !billingAddress) return res.status(404).json({ success: false, error: "Address not found" });
 
-
-    const draftInput = {
-      customerId,
-      lineItems,
-      shippingAddress,
-      billingAddress,
-      email,
-      note,
-      tags: [
-        ...tags,
-        paymentMethod === "COD" ? "COD" : "PREPAID"
-      ],
-      discountCodes,
-      acceptAutomaticDiscounts,
-      shippingCharge,
-    };
+    const shippingCharge = { title: "Prepaid", price: 150 };
+    const preparedLineItems = lineItems.map((li:any) => ({
+      variantId: li.variantId, 
+      quantity: li.quantity || 1,
+    }));
 
     if (paymentMethod === "COD") {
-    const { draftOrderId } = await createDraftOrder(draftInput);
-      const result = await completeDraftOrder(draftOrderId, true);
+      const order = await createOrder({
+        customerId,
+        email,
+        lineItems: preparedLineItems,
+        shippingAddress,
+        billingAddress,
+        note,
+        tags: [...tags, "COD"],
+        discountCodes,
+        shippingCharge,
+        currency,
+        markAsPaid: false, 
+      });
 
       return res.json({
         success: true,
-        shopifyOrderId: result.shopifyOrderId,
+        shopifyOrderId: order.id,
         message: "COD order created; payment pending on delivery",
       });
     }
-    //   razorpayOrderID: razorpayOrderId,
-    //   customerId,
-    //   shippingAddress,
-    //   billingAddress,
-    //   lineItems:lineItems,
-    //   amount: paise,
-    //   currency,
-    //   flowType:"Buy_Now",
-    //   status: "LINK_CREATED",
-    //   discountCodes,
-    //   acceptAutomaticDiscounts,
-    //   tags: draftInput.tags,
-    // });
+
+    const order = await createOrder({
+      customerId,
+      email,
+      lineItems: preparedLineItems,
+      shippingAddress,
+      billingAddress,
+      note,
+      tags: [...tags, "PREPAID"],
+      shippingCharge,
+      currency,
+      markAsPaid: true, 
+    });
 
     return res.json({
-      success:        true,
-      message:        "Choose payment method as COD",
+      success: true,
+      shopifyOrderId: order.id,
+      message: "Order created",
     });
-  } catch (err:any) {
+  } catch (err: any) {
     console.error("buyNow error:", err);
     return res.status(500).json({ success: false, error: err.message });
   }
 };
+
