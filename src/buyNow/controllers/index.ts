@@ -5,32 +5,29 @@ export const buyNow = async (req: Request, res: Response): Promise<any> => {
   try {
     const {
       customerId,
-      shippingAddressId,
-      billingAddressId,
+      shippingAddress,
+      billingAddress,
       lineItems,
       email,
       note,
       tags = [],
       discountCodes = [],
-      acceptAutomaticDiscounts = false,
-      paymentMethod,  
+      paymentMethod,
       currency = "INR",
     } = req.body as any;
 
+    // Validation
     if (!customerId) return res.status(400).json({ success: false, error: "Missing customerId" });
-    if (!shippingAddressId || !billingAddressId) return res.status(400).json({ success: false, error: "Provide shippingAddressId and billingAddressId" });
+    if (!shippingAddress || !billingAddress) return res.status(400).json({ success: false, error: "Provide shippingAddress and billingAddress" });
     if (!Array.isArray(lineItems) || lineItems.length === 0) return res.status(400).json({ success: false, error: "Missing lineItems" });
     if (!["COD","ONLINE"].includes(paymentMethod)) return res.status(400).json({ success: false, error: "Invalid paymentMethod" });
 
-    const { addresses } = await getCustomerAddress(customerId);
-    const shippingAddress = addresses.addresses.find((a:any) => a.id === shippingAddressId);
-    const billingAddress  = addresses.addresses.find((a:any) => a.id === billingAddressId);
-    if (!shippingAddress || !billingAddress) return res.status(404).json({ success: false, error: "Address not found" });
-
     const shippingCharge = { title: "Prepaid", price: 150 };
+
     const preparedLineItems = lineItems.map((li:any) => ({
-      variantId: li.variantId, 
+      variantId: li.variantId,
       quantity: li.quantity || 1,
+      price: li.price, // optional: include price for custom items
     }));
 
     if (paymentMethod === "COD") {
@@ -45,7 +42,7 @@ export const buyNow = async (req: Request, res: Response): Promise<any> => {
         discountCodes,
         shippingCharge,
         currency,
-        markAsPaid: false, 
+        markAsPaid: false,
       });
 
       return res.json({
@@ -55,6 +52,7 @@ export const buyNow = async (req: Request, res: Response): Promise<any> => {
       });
     }
 
+    // ONLINE payment
     const order = await createOrder({
       customerId,
       email,
@@ -65,7 +63,7 @@ export const buyNow = async (req: Request, res: Response): Promise<any> => {
       tags: [...tags, "PREPAID"],
       shippingCharge,
       currency,
-      markAsPaid: true, 
+      markAsPaid: true,
     });
 
     return res.json({
@@ -73,6 +71,7 @@ export const buyNow = async (req: Request, res: Response): Promise<any> => {
       shopifyOrderId: order.id,
       message: "Order created",
     });
+
   } catch (err: any) {
     console.error("buyNow error:", err);
     return res.status(500).json({ success: false, error: err.message });
