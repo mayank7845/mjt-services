@@ -5,6 +5,7 @@ import {
   generateRandomString,
   generateResponse,
 } from "../helpers/index";
+import buyNowModel from "../middlewares/index";
 
 const home = async (req: Request, res: Response): Promise<any> => {
   try {
@@ -22,51 +23,65 @@ const home = async (req: Request, res: Response): Promise<any> => {
 
 const buyNow = async (req: Request, res: Response): Promise<any> => {
   try {
-    const {
-      shippingAddress,
-      billingAddress,
-      lineItems,
-      email,
-      note,
-      tags = [],
-      discountCodes = [],
-      currency = "INR",
-    } = req.body as any;
-    if (!shippingAddress || !billingAddress) {
-      return res.status(200).send({
+    const data = await req.body;
+    try {
+      const body = await buyNowModel.validate(data, {
+        abortEarly: false,
+        strict: true,
+      });
+      const {
+        shippingAddress,
+        billingAddress,
+        lineItems,
+        email,
+        note,
+        tags = [],
+      } = body as any;
+      const currency = "INR",
+        discountCodes: any = [];
+      if (!shippingAddress || !billingAddress) {
+        return res.status(200).send({
+          success: false,
+          error: "Provide shippingAddress and billingAddress",
+        });
+      }
+      if (!Array.isArray(lineItems) || lineItems.length === 0) {
+        return res.status(200).send({
+          success: false,
+          error: "Missing lineItems",
+        });
+      }
+      const shippingCharge = { title: "Prepaid", price: 0 };
+      const preparedLineItems = lineItems.map((li: any) => ({
+        variantId: li.variantId,
+        quantity: li.quantity || 1,
+        price: li.price, // optional: include price for custom items
+      }));
+      const order = await createOrder({
+        email,
+        lineItems: preparedLineItems,
+        shippingAddress,
+        billingAddress,
+        note,
+        tags: [...tags, "Custom Order"],
+        discountCodes,
+        shippingCharge,
+        currency,
+        markAsPaid: true,
+      });
+      return res.send({
+        success: true,
+        shopifyOrderId: order,
+        message: "COD order created; payment pending on delivery",
+      });
+    } catch (error: any) {
+      return res.status(200).json({
         success: false,
-        error: "Provide shippingAddress and billingAddress",
+        message:
+          error?.errors[0] || "Error occurred while processing your request!!",
+        error: error?.errors || error.message || error,
       });
     }
-    if (!Array.isArray(lineItems) || lineItems.length === 0) {
-      return res.status(200).send({
-        success: false,
-        error: "Missing lineItems",
-      });
-    }
-    const shippingCharge = { title: "Prepaid", price: 0 };
-    const preparedLineItems = lineItems.map((li: any) => ({
-      variantId: li.variantId,
-      quantity: li.quantity || 1,
-      price: li.price, // optional: include price for custom items
-    }));
-    const order = await createOrder({
-      email,
-      lineItems: preparedLineItems,
-      shippingAddress,
-      billingAddress,
-      note,
-      tags: [...tags, "Custom Order"],
-      discountCodes,
-      shippingCharge,
-      currency,
-      markAsPaid: true,
-    });
-    return res.send({
-      success: true,
-      shopifyOrderId: order,
-      message: "COD order created; payment pending on delivery",
-    });
   } catch (err: any) {
     console.error("buyNow error:", err);
     return res.status(500).send({ success: false, error: err.message });
@@ -145,67 +160,80 @@ const orderCreate = async (req: Request, res: Response): Promise<any> => {
           )
         );
     }
-    const body = await Decrypt(data, key);
-    const {
-      shippingAddress,
-      billingAddress,
-      lineItems,
-      email,
-      note,
-      tags = [],
-      discountCodes = [],
-      currency = "INR",
-    } = body as any;
-    if (!shippingAddress || !billingAddress) {
+    const decData = await Decrypt(data, key);
+    try {
+      const body = await buyNowModel.validate(decData, {
+        abortEarly: false,
+        strict: true,
+      });
+      const {
+        shippingAddress,
+        billingAddress,
+        lineItems,
+        email,
+        note,
+        tags = [],
+      } = body as any;
+      const currency = "INR",
+        discountCodes: any = [];
+      if (!shippingAddress || !billingAddress) {
+        return res.status(200).send(
+          generateResponse(
+            {
+              success: false,
+              error: "Provide shippingAddress and billingAddress",
+            },
+            Key
+          )
+        );
+      }
+      if (!Array.isArray(lineItems) || lineItems.length === 0) {
+        return res.status(200).send(
+          generateResponse(
+            {
+              success: false,
+              error: "Missing lineItems",
+            },
+            Key
+          )
+        );
+      }
+      const shippingCharge = { title: "Prepaid", price: 0 };
+      const preparedLineItems = lineItems.map((li: any) => ({
+        variantId: li.variantId,
+        quantity: li.quantity || 1,
+        price: li.price, // optional: include price for custom items
+      }));
+      const order = await createOrder({
+        email,
+        lineItems: preparedLineItems,
+        shippingAddress,
+        billingAddress,
+        note,
+        tags: [...tags, "Custom Order"],
+        discountCodes,
+        shippingCharge,
+        currency,
+        markAsPaid: true,
+      });
       return res.status(200).send(
         generateResponse(
           {
-            success: false,
-            error: "Provide shippingAddress and billingAddress",
+            success: true,
+            shopifyOrderId: order.id,
+            message: "Order created successfully!!",
           },
           Key
         )
       );
+    } catch (error: any) {
+      return res.status(200).json({
+        success: false,
+        message:
+          error?.errors[0] || "Error occurred while processing your request!!",
+        error: error?.errors || error.message || error,
+      });
     }
-    if (!Array.isArray(lineItems) || lineItems.length === 0) {
-      return res.status(200).send(
-        generateResponse(
-          {
-            success: false,
-            error: "Missing lineItems",
-          },
-          Key
-        )
-      );
-    }
-    const shippingCharge = { title: "Prepaid", price: 0 };
-    const preparedLineItems = lineItems.map((li: any) => ({
-      variantId: li.variantId,
-      quantity: li.quantity || 1,
-      price: li.price, // optional: include price for custom items
-    }));
-    const order = await createOrder({
-      email,
-      lineItems: preparedLineItems,
-      shippingAddress,
-      billingAddress,
-      note,
-      tags: [...tags, "Custom Order"],
-      discountCodes,
-      shippingCharge,
-      currency,
-      markAsPaid: true,
-    });
-    return res.status(200).send(
-      generateResponse(
-        {
-          success: true,
-          shopifyOrderId: order.id,
-          message: "Order created successfully!!",
-        },
-        Key
-      )
-    );
   } catch (err: any) {
     const Key = generateRandomString(32);
     console.error("buyNow error:", err);
