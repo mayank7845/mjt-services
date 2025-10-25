@@ -69,13 +69,13 @@ const buyNow = async (req: Request, res: Response): Promise<any> => {
         currency,
         markAsPaid: true,
       });
-      return res.send({
+      return res.status(200).send({
         success: true,
         shopifyOrderId: order.id,
         message: "COD order created; payment pending on delivery",
       });
     } catch (error: any) {
-      return res.status(200).json({
+      return res.status(200).send({
         success: false,
         message:
           error?.errors[0] || "Error occurred while processing your request!!",
@@ -227,12 +227,19 @@ const orderCreate = async (req: Request, res: Response): Promise<any> => {
         )
       );
     } catch (error: any) {
-      return res.status(200).json({
-        success: false,
-        message:
-          error?.errors[0] || "Error occurred while processing your request!!",
-        error: error?.errors || error.message || error,
-      });
+      const Key = generateRandomString(32);
+      return res.status(200).send(
+        generateResponse(
+          {
+            success: false,
+            message:
+              error?.errors[0] ||
+              "Error occurred while processing your request!!",
+            error: error?.errors || error.message || error,
+          },
+          Key
+        )
+      );
     }
   } catch (err: any) {
     const Key = generateRandomString(32);

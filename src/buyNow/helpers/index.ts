@@ -133,7 +133,6 @@ async function createOrder(input: {
     currency: input.currency || "USD",
     lineItems,
     email: input.email,
-    phone: input.shippingAddress?.phone ?? "",
     shippingAddress: input.shippingAddress,
     billingAddress: input.billingAddress,
     note: input.note,
