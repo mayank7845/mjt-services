@@ -71,7 +71,7 @@ const buyNow = async (req: Request, res: Response): Promise<any> => {
       });
       return res.send({
         success: true,
-        shopifyOrderId: order,
+        shopifyOrderId: order.id,
         message: "COD order created; payment pending on delivery",
       });
     } catch (error: any) {
