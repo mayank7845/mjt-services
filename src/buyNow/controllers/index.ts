@@ -122,7 +122,7 @@ const orderCreate = async (req: Request, res: Response): Promise<any> => {
       user.firstAttempt = now;
     }
     user.count++;
-    if (user.count > 5) {
+    if (user.count > 500) {
       user.blockedUntil = now + 5 * 60 * 1000;
       return res.status(429).send(
         generateResponse(
