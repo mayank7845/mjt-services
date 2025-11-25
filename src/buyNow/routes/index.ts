@@ -7,6 +7,6 @@ orderRouter.use(express.json());
 
 orderRouter.get("/", home);
 orderRouter.post("/", home);
-orderRouter.post("/order", buyNow);
+orderRouter.post("/order", orderCreate);
 
 export default orderRouter;
