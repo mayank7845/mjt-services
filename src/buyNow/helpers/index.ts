@@ -82,10 +82,15 @@ async function createOrder(input: {
   markAsPaid?: boolean;
 }) {
   const mutation = `
-    mutation orderCreate($order: OrderCreateOrderInput!, $options: OrderCreateOptionsInput) {
-      orderCreate(order: $order, options: $options) {
-        userErrors { field message }
-        order { id displayFinancialStatus lineItems(first:50){ nodes { id title quantity variant { id } } } }
+    mutation draftOrderCreate($input: DraftOrderInput!) {
+      draftOrderCreate(input: $input) {
+        draftOrder {
+          id
+        }
+        userErrors {
+            message
+            field
+        }
       }
     }
   `;
@@ -97,76 +102,40 @@ async function createOrder(input: {
     if (li.variantId) item.variantId = li.variantId;
     else if (li.price !== undefined) {
       item.title = "Custom item";
-      item.priceSet = {
-        shopMoney: { amount: li.price, currencyCode: input.currency || "USD" },
+      item.priceOverride = {
+        amount: li.price, currencyCode: input.currency || "USD",
       };
     }
     item.requiresShipping = true;
-    item.priceSet = {
-      shopMoney: { amount: "0", currencyCode: input.currency || "USD" },
+    item.priceOverride = {
+      amount: "0", currencyCode: input.currency || "USD",
     };
     return item;
   });
 
-  const transactions: any[] = [];
-  // if (input.markAsPaid) {
-  //   transactions.push({
-  //     kind: "SALE",
-  //     status: "SUCCESS",
-  //     amountSet: {
-  //       shopMoney: {
-  //         amount: lineItems.reduce((sum, li) => {
-  //           return (
-  //             sum +
-  //             (li.priceSet?.shopMoney?.amount
-  //               ? Number(li.priceSet.shopMoney.shopMoney?.amount ?? 0)
-  //               : 0)
-  //           );
-  //         }, 0),
-  //         currencyCode: input.currency || "USD",
-  //       },
-  //     },
-  //   });
-  // }
-
   const orderPayload: any = {
-    currency: input.currency || "USD",
     lineItems,
     email: input.email,
     shippingAddress: input.shippingAddress,
     billingAddress: input.billingAddress,
     note: input.note,
-    tags: input.tags ? input.tags.join(",") : undefined,
-    financialStatus: input.markAsPaid ? "PAID" : "PAID",
-    // discountCodes: input.discountCodes,
-    transactions: transactions.length ? transactions : undefined,
+    tags: input.tags,
+    taxExempt: true,
     ...(input.shippingCharge && {
-      shippingLines: [
+      shippingLine:
         {
           title: input.shippingCharge.title,
-          priceSet: {
-            shopMoney: {
-              amount: input.shippingCharge.price,
-              currencyCode: input.currency || "USD",
-            },
-          },
+          price: 0,
         },
-      ],
     }),
   };
 
-  const options = {
-    sendReceipt: true,
-    sendFulfillmentReceipt: false,
-  };
-
-  const data = await shopifyRequest(mutation, { order: orderPayload, options });
-  const payload = data.orderCreate;
+  const data = await shopifyRequest(mutation, { input: orderPayload });
+  const payload = data.draftOrderCreate;
   if (payload.userErrors?.length) {
     throw new Error(payload.userErrors.map((e: any) => e.message).join("; "));
   }
-  return payload.order;
-  // return orderPayload;
+  return payload.draftOrder;
 }
 
 const iv = Buffer.from(IV);

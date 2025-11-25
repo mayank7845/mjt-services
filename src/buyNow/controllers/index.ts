@@ -78,7 +78,7 @@ const buyNow = async (req: Request, res: Response): Promise<any> => {
       return res.status(200).send({
         success: false,
         message:
-          error?.errors[0] || "Error occurred while processing your request!!",
+          error?.errors || "Error occurred while processing your request!!",
         error: error?.errors || error.message || error,
       });
     }
@@ -233,7 +233,7 @@ const orderCreate = async (req: Request, res: Response): Promise<any> => {
           {
             success: false,
             message:
-              error?.errors[0] ||
+              error?.errors ||
               "Error occurred while processing your request!!",
             error: error?.errors || error.message || error,
           },
